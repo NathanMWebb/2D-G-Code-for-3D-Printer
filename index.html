@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trace Studio — Image to G-code for Bambu Lab Printers</title>
+<meta name="description" content="Convert any image into clean G-code for pen plotting on your Bambu Lab 3D printer.">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f0f0f;--bg2:#161616;--bg3:#1e1e1e;
+  --surface:#222;--surface2:#2a2a2a;
+  --border:#333;--border2:#444;
+  --text:#f0ede8;--text2:#a0998f;--text3:#555;
+  --accent:#c8f060;--accent2:#a8d040;
+  --accent-dim:#1e2a08;--accent-text:#1a2206;
+  --warn:#f0c060;--warn-bg:#2a2010;
+  --sans:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
+}
+[data-theme=light]{
+  --bg:#f5f2ed;--bg2:#ede9e2;--bg3:#e5e0d8;
+  --surface:#fff;--surface2:#f8f5f0;
+  --border:#ddd9d2;--border2:#c8c3bb;
+  --text:#1a1714;--text2:#6b6358;--text3:#aaa;
+  --accent:#4a8c10;--accent2:#3a7008;
+  --accent-dim:#e8f2d8;--accent-text:#1e3a06;
+  --warn:#8a6010;--warn-bg:#fef8e8;
+}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+a{color:inherit;text-decoration:none}
+
+/* NAV */
+nav{
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  padding:0 1.5rem;height:52px;
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:100;
+}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-mark{width:30px;height:30px;background:var(--accent);border-radius:7px;display:flex;align-items:center;justify-content:center}
+.logo-mark svg{width:17px;height:17px;stroke:var(--accent-text);fill:none;stroke-width:2.5}
+.logo-name{font-size:15px;font-weight:500;color:var(--text)}
+.logo-v{font-size:11px;background:var(--accent-dim);color:var(--accent);border-radius:20px;padding:2px 8px;font-weight:500;margin-left:4px}
+.theme-btn{width:34px;height:34px;border-radius:7px;background:transparent;border:1px solid var(--border);color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.theme-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2}
+
+/* HERO */
+.hero{text-align:center;padding:2.5rem 1.5rem 2rem;max-width:640px;margin:0 auto}
+.eyebrow{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--accent);font-weight:500;background:var(--accent-dim);border-radius:20px;padding:4px 12px;margin-bottom:1rem}
+.hero h1{font-size:2.2rem;font-weight:300;letter-spacing:-.04em;line-height:1.15;margin-bottom:.6rem}
+.hero h1 strong{font-weight:500;color:var(--accent)}
+.hero p{font-size:14px;color:var(--text2);max-width:460px;margin:0 auto 1.5rem}
+.steps{display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:4px;font-size:12px;color:var(--text3)}
+.sn{width:20px;height:20px;border-radius:50%;background:var(--accent);color:var(--accent-text);font-size:10px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;margin-right:4px}
+
+/* LAYOUT */
+.wrap{max-width:980px;margin:0 auto;padding:0 1.5rem 4rem}
+
+/* TWO COLUMN */
+.cols{display:flex;gap:1.25rem;align-items:flex-start}
+.col-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1.25rem}
+.col-side{width:290px;flex-shrink:0;display:flex;flex-direction:column;gap:1.25rem}
+@media(max-width:740px){.cols{flex-direction:column}.col-side{width:100%}}
+
+/* CARD */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.card-h{padding:.8rem 1.2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.card-ht{font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;display:flex;align-items:center;gap:6px}
+.card-ht svg{width:13px;height:13px;stroke:var(--accent);fill:none;stroke-width:2}
+.card-b{padding:1.2rem}
+
+/* UPLOAD */
+.drop{
+  border:1.5px dashed var(--border2);border-radius:10px;
+  padding:2.5rem 1rem;text-align:center;cursor:pointer;
+  transition:all .15s;background:var(--bg3);
+  min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-dim)}
+.drop-icon{width:44px;height:44px;background:var(--accent-dim);border-radius:11px;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+.drop-icon svg{width:22px;height:22px;stroke:var(--accent);fill:none;stroke-width:1.5}
+.drop h3{font-size:14px;font-weight:500;margin-bottom:3px}
+.drop p{font-size:12px;color:var(--text2);margin-bottom:10px}
+.drop-btn{display:inline-block;background:var(--accent);color:var(--accent-text);font-size:13px;font-weight:500;padding:7px 18px;border-radius:6px;cursor:pointer;margin-bottom:6px}
+.drop small{font-size:11px;color:var(--text3)}
+input[type=file]{display:none}
+
+/* CANVAS PAIR */
+.cpair{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:.75rem}
+.clabel{font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+canvas{width:100%;border-radius:7px;border:1px solid var(--border);display:block;background:#111}
+[data-theme=light] canvas{background:#f5f5f5}
+
+/* STATUS / PROGRESS */
+.status{font-size:12px;color:var(--text3);font-family:var(--mono);padding:5px 0;min-height:26px}
+.status.ok{color:var(--accent)}.status.err{color:#ff6b6b}.status.loading{color:var(--warn)}
+.prog{height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:.5rem}
+.prog-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .3s;width:0}
+
+/* GROUP LABEL */
+.glabel{font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--border)}
+
+/* SLIDER */
+.srow{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.srow:last-child{margin-bottom:0}
+.slabel{font-size:12px;color:var(--text2);min-width:115px;flex-shrink:0;line-height:1.3}
+.slabel small{display:block;font-size:10px;color:var(--text3)}
+.srow input[type=range]{flex:1;height:3px;-webkit-appearance:none;appearance:none;background:var(--border2);border-radius:2px;outline:none;cursor:pointer}
+.srow input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid var(--bg);box-shadow:0 0 0 1px var(--accent)}
+.sval{font-size:11px;font-family:var(--mono);font-weight:500;color:var(--text);min-width:36px;text-align:right}
+
+/* SELECT */
+.selrow{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.selrow label{font-size:12px;color:var(--text2);min-width:115px;flex-shrink:0}
+.selrow select{flex:1;font-size:12px;padding:5px 8px;border-radius:7px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);font-family:var(--sans);cursor:pointer;outline:none}
+
+/* BUTTONS */
+.bstack{display:flex;flex-direction:column;gap:7px;margin-top:1rem}
+.btn{width:100%;padding:9px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:13px;font-weight:500;cursor:pointer;font-family:var(--sans);transition:all .12s;display:flex;align-items:center;justify-content:center;gap:7px}
+.btn svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2}
+.btn:hover{background:var(--bg3)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn.primary{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+.btn.primary:hover{background:var(--accent2);border-color:var(--accent2)}
+.btn.sm{width:auto;padding:5px 11px;font-size:12px}
+.btn.ghost{background:transparent;border-color:var(--border)}
+
+/* ALERT */
+.alert{border-radius:8px;padding:9px 12px;font-size:12px;line-height:1.5;display:flex;gap:8px;align-items:flex-start;margin-bottom:.9rem}
+.alert svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0;margin-top:1px}
+.awarn{background:var(--warn-bg);color:var(--warn)}
+.ainfo{background:var(--accent-dim);color:var(--accent)}
+
+/* EXPORT TABS */
+.etabs{display:flex;gap:5px;margin-bottom:10px}
+.etab{flex:1;padding:6px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--sans);transition:all .12s;text-align:center}
+.etab.on{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+.etab:hover:not(.on){background:var(--surface2)}
+
+/* OUTPUT */
+.ohead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.olabel{font-size:12px;font-weight:500;color:var(--text2)}
+.oactions{display:flex;gap:5px}
+textarea{width:100%;height:190px;font-family:var(--mono);font-size:11px;line-height:1.7;border:1px solid var(--border);border-radius:8px;padding:9px 11px;resize:vertical;background:var(--bg3);color:var(--text);outline:none}
+.ostats{font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:5px}
+
+/* TIPS & RESOURCES */
+.tlist{list-style:none}
+.tlist li{font-size:12px;color:var(--text2);padding:6px 0;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:flex-start;line-height:1.5}
+.tlist li:last-child{border-bottom:none}
+.tdot{width:5px;height:5px;border-radius:50%;background:var(--accent);flex-shrink:0;margin-top:6px}
+.rlink{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);transition:opacity .12s}
+.rlink:last-child{border-bottom:none}
+.rlink:hover{opacity:.7}
+.rname{font-size:13px;font-weight:500;color:var(--text)}
+.rsub{font-size:11px;color:var(--text3);margin-top:1px}
+.rbadge{font-size:10px;font-weight:500;padding:3px 8px;border-radius:20px;background:var(--accent-dim);color:var(--accent);flex-shrink:0}
+
+/* CGROUP */
+.cgroup{margin-bottom:1.1rem}
+.cgroup:last-child{margin-bottom:0}
+
+.hidden{display:none!important}
+
+footer{text-align:center;padding:1.5rem;font-size:12px;color:var(--text3);border-top:1px solid var(--border)}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">
+    <div class="logo-mark"><svg viewBox="0 0 18 18"><path d="M3 15L9 3L15 15"/><path d="M5.5 10h7"/></svg></div>
+    <span class="logo-name">Trace Studio</span>
+    <span class="logo-v">v1.0</span>
+  </div>
+  <button class="theme-btn" id="themeBtn">
+    <svg id="ticon" viewBox="0 0 16 16"><circle cx="8" cy="8" r="4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M3.5 12.5l1.4-1.4M11.1 4.9l1.4-1.4"/></svg>
+  </button>
+</nav>
+
+<div class="hero">
+  <div class="eyebrow">✦ Image to G-code for Bambu Lab</div>
+  <h1>Draw anything on<br><strong>paper with your printer</strong></h1>
+  <p>Upload an image, tune the trace, export G-code for your Bambu Lab printer with a marker attached.</p>
+  <div class="steps">
+    <span class="sn">1</span>Upload&nbsp;
+    <span style="color:var(--border2)">→</span>&nbsp;
+    <span class="sn">2</span>Tune&nbsp;
+    <span style="color:var(--border2)">→</span>&nbsp;
+    <span class="sn">3</span>Export&nbsp;
+    <span style="color:var(--border2)">→</span>&nbsp;
+    <span class="sn">4</span>Print &amp; draw
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="cols">
+
+    <!-- MAIN COLUMN -->
+    <div class="col-main">
+
+      <!-- UPLOAD -->
+      <div class="card">
+        <div class="card-h">
+          <span class="card-ht">
+            <svg viewBox="0 0 14 14"><rect x="1" y="1" width="12" height="12" rx="2"/><path d="M7 4v6M4 7l3-3 3 3"/></svg>
+            Upload image
+          </span>
+        </div>
+        <div class="card-b">
+          <div class="drop" id="dropZone">
+            <div class="drop-icon">
+              <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            </div>
+            <h3>Drop your image here</h3>
+            <p>PNG, JPG — high contrast or line art works best</p>
+            <label class="drop-btn" for="fileInput">Browse files</label>
+            <small>Nothing is uploaded — all processing happens in your browser</small>
+            <input type="file" id="fileInput" accept="image/*">
+          </div>
+
+          <div class="cpair hidden" id="cpair">
+            <div>
+              <div class="clabel">Original</div>
+              <canvas id="origCanvas"></canvas>
+            </div>
+            <div>
+              <div class="clabel">Trace preview</div>
+              <canvas id="edgeCanvas"></canvas>
+            </div>
+          </div>
+
+          <div class="prog hidden" id="progWrap"><div class="prog-fill" id="progFill"></div></div>
+          <div class="status" id="statusMsg"></div>
+        </div>
+      </div>
+
+      <!-- OUTPUT -->
+      <div class="card hidden" id="outCard">
+        <div class="card-h">
+          <span class="card-ht">
+            <svg viewBox="0 0 14 14"><path d="M2 4l3 3-3 3M7 10h5"/></svg>
+            Export
+          </span>
+          <div style="display:flex;gap:5px">
+            <button class="btn sm ghost" id="copyBtn">Copy</button>
+            <button class="btn sm primary" id="dlBtn">↓ Download</button>
+          </div>
+        </div>
+        <div class="card-b">
+          <div class="alert awarn">
+            <svg viewBox="0 0 14 14"><path d="M7 1L13 12H1L7 1z"/><path d="M7 5v3M7 9.5v.5"/></svg>
+            <span><strong>Before printing:</strong> disable filament extrusion in Bambu Studio. Drag the .gcode file into Bambu Studio to load it.</span>
+          </div>
+          <div class="etabs">
+            <button class="etab on" data-f="gcode">G-code</button>
+            <button class="etab" data-f="svg">SVG</button>
+          </div>
+          <textarea id="outArea" readonly></textarea>
+          <div class="ostats" id="ostats"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- SIDEBAR -->
+    <div class="col-side">
+
+      <!-- SETTINGS -->
+      <div class="card">
+        <div class="card-h">
+          <span class="card-ht">
+            <svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="2"/><path d="M7 1v2M7 11v2M1 7h2M11 7h2"/></svg>
+            Settings
+          </span>
+        </div>
+        <div class="card-b">
+          <div class="cgroup">
+            <div class="glabel">Printer</div>
+            <div class="selrow">
+              <label>Printer model</label>
+              <select id="printerSel">
+                <option value="180">Bambu A1 Mini (180mm)</option>
+                <option value="256">Bambu A1 (256mm)</option>
+                <option value="256">Bambu P1S (256mm)</option>
+                <option value="256">Bambu X1 Carbon (256mm)</option>
+                <option value="220">Prusa MK4 (220mm)</option>
+                <option value="220">Creality Ender 3 (220mm)</option>
+              </select>
+            </div>
+            <div class="srow">
+              <span class="slabel">Output width<small>mm</small></span>
+              <input type="range" id="outW" min="20" max="170" value="140" step="1">
+              <span class="sval" id="outWv">140</span>
+            </div>
+          </div>
+
+          <div class="cgroup">
+            <div class="glabel">Image processing</div>
+            <div class="srow">
+              <span class="slabel">Pre-blur<small>reduce noise</small></span>
+              <input type="range" id="blur" min="0" max="5" value="1" step="0.5">
+              <span class="sval" id="blurv">1.0</span>
+            </div>
+            <div class="srow">
+              <span class="slabel">Brightness</span>
+              <input type="range" id="bright" min="-80" max="80" value="0" step="5">
+              <span class="sval" id="brightv">0</span>
+            </div>
+            <div class="srow">
+              <span class="slabel">Contrast</span>
+              <input type="range" id="contr" min="-80" max="80" value="20" step="5">
+              <span class="sval" id="contrv">20</span>
+            </div>
+            <div class="srow">
+              <span class="slabel">Threshold<small>edge sensitivity</small></span>
+              <input type="range" id="thresh" min="10" max="200" value="50" step="1">
+              <span class="sval" id="threshv">50</span>
+            </div>
+          </div>
+
+          <div class="cgroup">
+            <div class="glabel">Path quality</div>
+            <div class="srow">
+              <span class="slabel">Simplify<small>smoother lines</small></span>
+              <input type="range" id="simp" min="0" max="6" value="2" step="0.5">
+              <span class="sval" id="simpv">2.0</span>
+            </div>
+            <div class="srow">
+              <span class="slabel">Min length<small>remove tiny marks</small></span>
+              <input type="range" id="minL" min="2" max="60" value="15" step="1">
+              <span class="sval" id="minLv">15</span>
+            </div>
+          </div>
+
+          <div class="cgroup">
+            <div class="glabel">Speed & Z height</div>
+            <div class="srow">
+              <span class="slabel">Draw speed<small>mm/min</small></span>
+              <input type="range" id="dspd" min="200" max="3000" value="1500" step="100">
+              <span class="sval" id="dspdv">1500</span>
+            </div>
+            <div class="srow">
+              <span class="slabel">Travel speed<small>mm/min</small></span>
+              <input type="range" id="tspd" min="1000" max="6000" value="3000" step="100">
+              <span class="sval" id="tspdv">3000</span>
+            </div>
+            <div class="srow">
+              <span class="slabel">Pen down Z<small>press into paper</small></span>
+              <input type="range" id="zdn" min="-5" max="0" value="-0.8" step="0.1">
+              <span class="sval" id="zdnv">-0.8</span>
+            </div>
+            <div class="srow">
+              <span class="slabel">Pen up Z<small>lift between strokes</small></span>
+              <input type="range" id="zup" min="1" max="10" value="3" step="0.5">
+              <span class="sval" id="zupv">3.0</span>
+            </div>
+          </div>
+
+          <div class="bstack">
+            <button class="btn ghost" id="prevBtn" disabled>
+              <svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="5"/><circle cx="7" cy="7" r="2"/></svg>
+              Update preview
+            </button>
+            <button class="btn primary" id="genBtn" disabled>
+              <svg viewBox="0 0 14 14"><path d="M2 4l3 3-3 3M7 10h5"/></svg>
+              Generate G-code
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- PEN HOLDERS -->
+      <div class="card">
+        <div class="card-h"><span class="card-ht"><svg viewBox="0 0 14 14"><path d="M9 2l3 3-7 7H2v-3z"/></svg>Pen holder mods</span></div>
+        <div class="card-b">
+          <div class="alert ainfo" style="margin-bottom:.75rem">
+            <svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="5"/><path d="M7 5v3M7 9.5v.5"/></svg>
+            <span>Print one of these before you start — attach your marker and you're ready!</span>
+          </div>
+          <a class="rlink" href="https://us.store.bambulab.com/products/pen-holder" target="_blank">
+            <div><div class="rname">Official Bambu Pen Holder</div><div class="rsub">Bambu Store — A1 Mini, A1, P/X series</div></div>
+            <span class="rbadge">Official</span>
+          </a>
+          <a class="rlink" href="https://makerworld.com/en/models/429109-pen-holder-a1-a1-mini-plotter" target="_blank">
+            <div><div class="rname">A1 / A1 Mini Pen Holder</div><div class="rsub">MakerWorld — by gustav.ferdman</div></div>
+            <span class="rbadge">Free</span>
+          </a>
+          <a class="rlink" href="https://www.printables.com/model/368079" target="_blank">
+            <div><div class="rname">Prusa MK4 Pen Plotter</div><div class="rsub">Printables — clips on, no disassembly</div></div>
+            <span class="rbadge">Free</span>
+          </a>
+          <a class="rlink" href="https://www.thingiverse.com/thing:3375924" target="_blank">
+            <div><div class="rname">Ender 3 Pen Holder</div><div class="rsub">Thingiverse — snap fit</div></div>
+            <span class="rbadge">Free</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- TIPS -->
+      <div class="card">
+        <div class="card-h"><span class="card-ht"><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="5"/><path d="M7 5v3M7 9.5v.5"/></svg>Tips</span></div>
+        <div class="card-b">
+          <ul class="tlist">
+            <li><span class="tdot"></span>High contrast or line art images trace cleanest</li>
+            <li><span class="tdot"></span>Boost contrast slider before adjusting threshold</li>
+            <li><span class="tdot"></span>Use Pre-blur for noisy/pencil sketch images</li>
+            <li><span class="tdot"></span>Tape paper flat to the build plate first</li>
+            <li><span class="tdot"></span>Start pen-down Z at -0.5mm and adjust from there</li>
+            <li><span class="tdot"></span>Drag .gcode directly into Bambu Studio to load</li>
+            <li><span class="tdot"></span>Disable filament detection before every run</li>
+          </ul>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<footer>
+  <strong style="color:var(--text2)">Trace Studio</strong> &nbsp;·&nbsp; Made for Bambu Lab pen plotting &nbsp;·&nbsp; Everything runs locally in your browser
+</footer>
+
+<script>
+// THEME
+const themeBtn=document.getElementById('themeBtn'),ticon=document.getElementById('ticon');
+let dark=true;
+themeBtn.onclick=()=>{
+  dark=!dark;
+  document.documentElement.setAttribute('data-theme',dark?'':'light');
+  ticon.innerHTML=dark
+    ?'<circle cx="8" cy="8" r="4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M3.5 12.5l1.4-1.4M11.1 4.9l1.4-1.4"/>'
+    :'<path d="M12 12A7 7 0 015 5a7 7 0 000 10 7 7 0 007-7z"/>';
+};
+
+// SLIDERS
+[['outW',0],['blur',1],['bright',0],['contr',0],['thresh',0],['simp',1],['minL',0],['dspd',0],['tspd',0],['zdn',1],['zup',1]].forEach(([id,d])=>{
+  const el=document.getElementById(id),v=document.getElementById(id+'v');
+  el.oninput=()=>v.textContent=parseFloat(el.value).toFixed(d);
+});
+
+// PRINTER SELECT
+document.getElementById('printerSel').onchange=function(){
+  const max=Math.round(parseInt(this.value)*0.9);
+  const el=document.getElementById('outW');
+  el.max=max; if(parseInt(el.value)>max){el.value=max;document.getElementById('outWv').textContent=max;}
+};
+
+// UPLOAD
+const dropZone=document.getElementById('dropZone');
+const fileInput=document.getElementById('fileInput');
+const origC=document.getElementById('origCanvas');
+const edgeC=document.getElementById('edgeCanvas');
+const cpair=document.getElementById('cpair');
+const prevBtn=document.getElementById('prevBtn');
+const genBtn=document.getElementById('genBtn');
+const statusMsg=document.getElementById('statusMsg');
+const outCard=document.getElementById('outCard');
+const outArea=document.getElementById('outArea');
+const ostats=document.getElementById('ostats');
+const progWrap=document.getElementById('progWrap');
+const progFill=document.getElementById('progFill');
+const CS=300;
+let img=null,gcode='',svg='',fmt='gcode';
+
+const setStatus=(m,t='')=>{statusMsg.textContent=m;statusMsg.className='status'+(t?' '+t:'');};
+const setProgress=p=>{progWrap.classList.toggle('hidden',p<=0||p>=100);progFill.style.width=p+'%';};
+
+dropZone.ondragover=e=>{e.preventDefault();dropZone.classList.add('over');};
+dropZone.ondragleave=()=>dropZone.classList.remove('over');
+dropZone.ondrop=e=>{e.preventDefault();dropZone.classList.remove('over');load(e.dataTransfer.files[0]);};
+fileInput.onchange=()=>load(fileInput.files[0]);
+
+function load(file){
+  if(!file)return;
+  const r=new FileReader();
+  r.onload=e=>{
+    const i=new Image();
+    i.onload=()=>{
+      img=i;
+      const sc=Math.min(CS/i.width,CS/i.height);
+      origC.width=Math.round(i.width*sc);origC.height=Math.round(i.height*sc);
+      origC.getContext('2d').drawImage(i,0,0,origC.width,origC.height);
+      cpair.classList.remove('hidden');
+      prevBtn.disabled=false;genBtn.disabled=false;
+      setStatus('Loaded: '+i.width+'×'+i.height+'px','ok');
+      preview();
+    };
+    i.src=e.target.result;
+  };
+  r.readAsDataURL(file);
+}
+
+// IMAGE PROCESSING
+function adjustBC(data,b,c){
+  const f=(259*(c+255))/(255*(259-c));
+  for(let i=0;i<data.length;i+=4){
+    for(let j=0;j<3;j++){let v=f*(data[i+j]-128)+128+b;data[i+j]=Math.max(0,Math.min(255,v));}
+  }
+}
+function grayscale(data,w,h){
+  const g=new Float32Array(w*h);
+  for(let i=0;i<w*h;i++)g[i]=data[i*4]*.299+data[i*4+1]*.587+data[i*4+2]*.114;
+  return g;
+}
+function sobel(g,w,h){
+  const e=new Float32Array(w*h);
+  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+    const gx=-g[(y-1)*w+(x-1)]+g[(y-1)*w+(x+1)]-2*g[y*w+(x-1)]+2*g[y*w+(x+1)]-g[(y+1)*w+(x-1)]+g[(y+1)*w+(x+1)];
+    const gy=-g[(y-1)*w+(x-1)]-2*g[(y-1)*w+x]-g[(y-1)*w+(x+1)]+g[(y+1)*w+(x-1)]+2*g[(y+1)*w+x]+g[(y+1)*w+(x+1)];
+    e[y*w+x]=Math.sqrt(gx*gx+gy*gy);
+  }
+  return e;
+}
+function gaussBlur(id,w,h,r){
+  if(r<=0)return;
+  const r2=Math.ceil(r),k=[],src=new Uint8ClampedArray(id.data),d=id.data;
+  let ks=0;
+  for(let y=-r2;y<=r2;y++)for(let x=-r2;x<=r2;x++){const v=Math.exp(-(x*x+y*y)/(2*r*r));k.push({x,y,v});ks+=v;}
+  k.forEach(e=>e.v/=ks);
+  for(let py=0;py<h;py++)for(let px=0;px<w;px++){
+    let R=0,G=0,B=0;
+    for(const e of k){const nx=Math.max(0,Math.min(w-1,px+e.x)),ny=Math.max(0,Math.min(h-1,py+e.y)),i=(ny*w+nx)*4;R+=src[i]*e.v;G+=src[i+1]*e.v;B+=src[i+2]*e.v;}
+    const i=(py*w+px)*4;d[i]=R;d[i+1]=G;d[i+2]=B;
+  }
+}
+function tracePaths(edges,w,h,thresh,minLen){
+  const vis=new Uint8Array(w*h);
+  const ie=(x,y)=>x>0&&y>0&&x<w-1&&y<h-1&&edges[y*w+x]>thresh;
+  const dirs=[[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]];
+  const paths=[];
+  for(let sy=1;sy<h-1;sy++)for(let sx=1;sx<w-1;sx++){
+    if(!ie(sx,sy)||vis[sy*w+sx])continue;
+    const path=[[sx,sy]];vis[sy*w+sx]=1;
+    let cx=sx,cy=sy,ld=0;
+    for(let s=0;s<4000;s++){
+      let found=false;
+      for(let d=0;d<8;d++){const di=(ld+d)%8,[dx,dy]=dirs[di],nx=cx+dx,ny=cy+dy;
+        if(ie(nx,ny)&&!vis[ny*w+nx]){vis[ny*w+nx]=1;path.push([nx,ny]);cx=nx;cy=ny;ld=di;found=true;break;}
+      }
+      if(!found)break;
+    }
+    if(path.length>=minLen)paths.push(path);
+  }
+  return paths;
+}
+function rdp(pts,eps){
+  if(pts.length<=2)return pts;
+  let md=0,mi=0;
+  const[x1,y1]=pts[0],[x2,y2]=pts[pts.length-1];
+  const dx=x2-x1,dy=y2-y1,len=Math.sqrt(dx*dx+dy*dy);
+  for(let i=1;i<pts.length-1;i++){
+    const d=len>0?Math.abs(dy*pts[i][0]-dx*pts[i][1]+x2*y1-y2*x1)/len:Math.hypot(pts[i][0]-x1,pts[i][1]-y1);
+    if(d>md){md=d;mi=i;}
+  }
+  if(md>eps)return[...rdp(pts.slice(0,mi+1),eps).slice(0,-1),...rdp(pts.slice(mi),eps)];
+  return[pts[0],pts[pts.length-1]];
+}
+function getImgData(){
+  const bl=parseFloat(document.getElementById('blur').value);
+  const br=parseFloat(document.getElementById('bright').value);
+  const co=parseFloat(document.getElementById('contr').value);
+  const sc=Math.min(CS/img.width,CS/img.height);
+  const w=Math.round(img.width*sc),h=Math.round(img.height*sc);
+  const tmp=document.createElement('canvas');tmp.width=w;tmp.height=h;
+  const ctx=tmp.getContext('2d');ctx.drawImage(img,0,0,w,h);
+  const id=ctx.getImageData(0,0,w,h);
+  adjustBC(id.data,br,co);
+  gaussBlur(id,w,h,bl);
+  ctx.putImageData(id,0,0);
+  return{imgData:ctx.getImageData(0,0,w,h),w,h};
+}
+
+function preview(){
+  if(!img)return;
+  const thresh=parseFloat(document.getElementById('thresh').value);
+  const simp=parseFloat(document.getElementById('simp').value);
+  const minLen=parseInt(document.getElementById('minL').value);
+  const{imgData,w,h}=getImgData();
+  const gr=grayscale(imgData.data,w,h);
+  const edges=sobel(gr,w,h);
+  const paths=tracePaths(edges,w,h,thresh,minLen);
+  edgeC.width=w;edgeC.height=h;
+  const ctx=edgeC.getContext('2d');
+  ctx.fillStyle=dark?'#111':'#f5f5f5';ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle=dark?'#c8f060':'#2a5c10';ctx.lineWidth=1;ctx.lineCap='round';ctx.lineJoin='round';
+  for(const p of paths){
+    const sp=simp>0?rdp(p,simp):p;if(sp.length<2)continue;
+    ctx.beginPath();ctx.moveTo(sp[0][0],sp[0][1]);
+    for(let i=1;i<sp.length;i++)ctx.lineTo(sp[i][0],sp[i][1]);
+    ctx.stroke();
+  }
+  setStatus('Preview: '+paths.length+' paths detected','ok');
+}
+
+prevBtn.onclick=preview;
+
+function generate(){
+  if(!img)return;
+  setStatus('Processing...','loading');setProgress(15);
+  setTimeout(()=>{
+    const thresh=parseFloat(document.getElementById('thresh').value);
+    const simp=parseFloat(document.getElementById('simp').value);
+    const minLen=parseInt(document.getElementById('minL').value);
+    const ow=parseFloat(document.getElementById('outW').value);
+    const ds=parseInt(document.getElementById('dspd').value);
+    const ts=parseInt(document.getElementById('tspd').value);
+    const zd=parseFloat(document.getElementById('zdn').value);
+    const zu=parseFloat(document.getElementById('zup').value);
+    const bedW=parseInt(document.getElementById('printerSel').value);
+
+    const sc=Math.min(900/img.width,900/img.height);
+    const w=Math.round(img.width*sc),h=Math.round(img.height*sc);
+    const tmp=document.createElement('canvas');tmp.width=w;tmp.height=h;
+    const ctx=tmp.getContext('2d');ctx.drawImage(img,0,0,w,h);
+    const bl=parseFloat(document.getElementById('blur').value);
+    const br=parseFloat(document.getElementById('bright').value);
+    const co=parseFloat(document.getElementById('contr').value);
+    let id=ctx.getImageData(0,0,w,h);
+    adjustBC(id.data,br,co);gaussBlur(id,w,h,bl);ctx.putImageData(id,0,0);
+    id=ctx.getImageData(0,0,w,h);
+
+    setProgress(40);
+    const gr=grayscale(id.data,w,h);
+    const edges=sobel(gr,w,h);
+    setProgress(60);
+    const paths=tracePaths(edges,w,h,thresh,minLen);
+    const spaths=paths.map(p=>simp>0?rdp(p,simp):p).filter(p=>p.length>=2);
+    setProgress(80);
+
+    const oh=ow*(h/w);
+    const ox=(bedW-ow)/2,oy=(bedW-oh)/2;
+    const sx=ow/w,sy=oh/h;
+
+    // GCODE
+    const gc=[
+      '; ================================================',
+      '; Trace Studio — github.com/NathanMWebb/2D-G-Code-for-3D-Printer',
+      '; Printer: '+document.getElementById('printerSel').options[document.getElementById('printerSel').selectedIndex].text,
+      '; Output: '+ow.toFixed(1)+' x '+oh.toFixed(1)+' mm | Paths: '+spaths.length,
+      '; IMPORTANT: Disable extrusion before running!',
+      '; ================================================','',
+      'G21        ; metric units','G90        ; absolute positioning',
+      'G28        ; home all axes','G92 E0     ; reset extruder',
+      'M302 P1    ; allow cold extrusion',
+      'G1 Z'+zu.toFixed(2)+' F600    ; raise pen',
+      'G1 X'+ox.toFixed(3)+' Y'+oy.toFixed(3)+' F'+ts+'  ; move to start',''
+    ];
+    let moves=0;
+    for(const p of spaths){
+      const sx2=(ox+p[0][0]*sx).toFixed(3),sy2=(oy+(h-p[0][1])*sy).toFixed(3);
+      gc.push('G1 Z'+zu.toFixed(2)+' F600');
+      gc.push('G1 X'+sx2+' Y'+sy2+' F'+ts);
+      gc.push('G1 Z'+zd.toFixed(2)+' F300    ; pen down');
+      for(let i=1;i<p.length;i++){
+        gc.push('G1 X'+(ox+p[i][0]*sx).toFixed(3)+' Y'+(oy+(h-p[i][1])*sy).toFixed(3)+' F'+ds);
+        moves++;
+      }
+    }
+    gc.push('','G1 Z'+zu.toFixed(2)+' F600    ; pen up — done','G28 X Y    ; return home','M84        ; disable motors','; === End of Trace Studio output ===');
+    gcode=gc.join('\n');
+
+    // SVG
+    const svgl=['<?xml version="1.0" encoding="UTF-8"?>',
+      '<svg xmlns="http://www.w3.org/2000/svg" width="'+ow.toFixed(1)+'mm" height="'+oh.toFixed(1)+'mm" viewBox="0 0 '+ow.toFixed(2)+' '+oh.toFixed(2)+'">',
+      '  <g stroke="black" fill="none" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round">'];
+    for(const p of spaths){
+      svgl.push('    <polyline points="'+p.map(([x,y])=>(x*sx).toFixed(2)+','+((h-y)*sy).toFixed(2)).join(' ')+'"/>');
+    }
+    svgl.push('  </g>','</svg>');
+    svg=svgl.join('\n');
+
+    setProgress(100);
+    outCard.classList.remove('hidden');
+    updateOut();
+    ostats.textContent=spaths.length+' paths · '+moves.toLocaleString()+' moves · '+(gcode.length/1024).toFixed(1)+' KB';
+    setStatus('Done! '+spaths.length+' paths generated.','ok');
+    setProgress(0);
+    outCard.scrollIntoView({behavior:'smooth',block:'start'});
+    preview();
+  },60);
+}
+
+genBtn.onclick=generate;
+
+// EXPORT TABS
+document.querySelectorAll('.etab').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('.etab').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');fmt=b.dataset.f;updateOut();
+  };
+});
+function updateOut(){outArea.value=fmt==='gcode'?gcode:svg;}
+
+document.getElementById('copyBtn').onclick=()=>{
+  navigator.clipboard.writeText(fmt==='gcode'?gcode:svg).then(()=>{
+    const b=document.getElementById('copyBtn');b.textContent='Copied!';
+    setTimeout(()=>b.textContent='Copy',2000);
+  });
+};
+document.getElementById('dlBtn').onclick=()=>{
+  const blob=new Blob([fmt==='gcode'?gcode:svg],{type:'text/plain'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=fmt==='gcode'?'trace_studio.gcode':'trace_studio.svg';a.click();
+};
+</script>
+</body>
+</html>
